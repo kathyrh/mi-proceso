@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi Progreso · Sin gráficos, historial compartido</title>
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{--bg:#f3f6fb;--card:#fff;--text:#172033;--muted:#667085;--line:#dfe5ef;--accent:#2563eb;--accent2:#7c3aed;--ok:#15803d;--orange:#ea580c;--cyan:#0891b2}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+header{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;padding:24px 18px;box-shadow:0 5px 20px #1d4ed833}header h1{margin:0 0 5px;font-size:27px}.wrap{max-width:1000px;margin:auto;padding:18px}
+nav{display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;margin-bottom:18px;-webkit-overflow-scrolling:touch;touch-action:pan-y}nav button{white-space:nowrap;flex:0 0 auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;min-height:44px}
+button{border:0;border-radius:11px;padding:11px 14px;cursor:pointer;background:#e9eef7;color:#172033;font-weight:700;transition:.15s}button:hover{transform:translateY(-1px);filter:brightness(.98)}
+button.active,button.primary{background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;box-shadow:0 3px 10px #2563eb33}.danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:8px 12px;border-radius:10px;cursor:pointer}.danger:hover{background:#fecaca}
+.secondary{background:white;border:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:15px;box-shadow:0 5px 18px #1720330d}.card h2{margin-top:0;color:#1e293b}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.stat{font-size:25px;font-weight:700}.muted{color:var(--muted);font-size:13px}
+.bar{height:12px;background:#e8edf5;border-radius:99px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:99px;transition:width .3s}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+label{display:block;font-weight:600;margin:8px 0 5px}input,select,textarea{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:9px;background:#fff}
+.hidden{display:none}.foodrow,.setrow{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.tag{display:inline-block;padding:5px 9px;border-radius:99px;background:#f0f0f0;font-size:12px;margin:2px}
+.kcal{font-size:32px;font-weight:800}.green{color:var(--ok)}.small{font-size:12px}.exercise{border-top:1px solid var(--line);padding-top:15px;margin-top:15px}
+.notice{background:#f9fafb;border:1px dashed #d1d5db;border-radius:10px;padding:12px}
+@media(max-width:650px){nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;overflow:visible;touch-action:auto}nav button{width:100%;min-width:0;white-space:normal;padding:11px 6px;font-size:14px;line-height:1.2}.row,.row3{grid-template-columns:1fr}.foodrow,.setrow{grid-template-columns:1fr 1fr}.foodrow button,.setrow button{grid-column:1/-1}}
+.hero{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#eef2ff,#f8fafc)}.statcard{min-height:105px}.small{font-size:.86rem;color:#6b7280}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>Mi Progreso</h1><div style="opacity:.8">Registro de entrenamiento</div></div></header>
+<div class="wrap">
+<nav id="mainNav" aria-label="Navegación principal">
+<button type="button" class="active" data-tab="gym" onclick="tab('gym',this);return false;">🏋️ Gimnasio</button>
+<button type="button" data-tab="share" onclick="tab('share',this);return false;">📤 Compartir con ChatGPT</button>
+</nav>
+
+<section id="share" class="app-section hidden">
+<div class="card"><h2>Compartir entrenamiento con ChatGPT</h2><p class="muted">Genera un resumen de tus entrenamientos guardados y cópialo para pegarlo en ChatGPT. No incluye gráficos.</p>
+<div class="row"><div><label for="fromDate">Desde</label><input id="fromDate" type="date"></div><div><label for="toDate">Hasta</label><input id="toDate" type="date"></div></div><br>
+<button class="primary" onclick="makeSummary()">Generar resumen</button>
+<textarea id="summary" style="margin-top:15px;height:300px" placeholder="Aquí aparecerá el resumen para compartir con ChatGPT..."></textarea><br><br>
+<button onclick="copySummary()">Copiar resumen</button><span id="copyStatus" class="small" style="margin-left:10px"></span>
+</div></section>
+
+<section id="gym" class="app-section">
+<div class="card"><h2>Gimnasio</h2><div class="notice" id="suggestion">Selecciona la rutina que vas a entrenar.</div><br>
+<div class="row3">
+<button onclick="startWorkout('Upper A')">Upper A</button><button onclick="startWorkout('Upper B')">Upper B</button>
+<button onclick="startWorkout('Lower A')">Lower A</button><button onclick="startWorkout('Lower B')">Lower B</button>
+</div></div>
+<div id="workoutArea"></div>
+</section>
+
+<script>
+const KEY='miprogreso_sin_historial_v1';
+const baseFoods=[
+{name:'Huevo',k:70,p:6,c:.4,f:5,unit:'unidad',refQty:1,refUnit:'unidad'},
+{name:'Gallo pinto',k:200,p:7,c:34,f:5,unit:'taza',refQty:1,refUnit:'taza'},
+{name:'Plátano frito',k:220,p:1,c:57,f:1,unit:'100 g',base:'100g',refQty:100,refUnit:'g'},
+{name:'Arroz cocido',k:205,p:4.3,c:44.5,f:.4,unit:'taza',refQty:1,refUnit:'taza'},
+{name:'Frijoles cocidos',k:127,p:8.7,c:23,f:.5,unit:'1/2 taza',refQty:.5,refUnit:'taza'},
+{name:'Pechuga de pollo cocida',k:165,p:31,c:0,f:3.6,unit:'100 g',base:'100g',refQty:100,refUnit:'g'},
+{name:'Avena',k:380,p:13.5,c:68,f:7,unit:'100 g',base:'100g',refQty:100,refUnit:'g'},
+{name:'Proteína en polvo',k:120,p:24,c:3,f:2,unit:'scoop',refQty:1,refUnit:'scoop'},
+{name:'Banano',k:105,p:1.3,c:27,f:.3,unit:'unidad',refQty:1,refUnit:'unidad'},
+{name:'Papaya',k:43,p:.5,c:11,f:.3,unit:'100 g',base:'100g',refQty:100,refUnit:'g'},
+{name:'Almendras',k:579,p:21,c:22,f:50,unit:'100 g',base:'100g',refQty:100,refUnit:'g'},
+{name:'Pan Bimbo integral',k:80,p:3.2,c:15.1,f:.8,unit:'rebanada',refQty:1,refUnit:'rebanada'},
+{name:'Queso Dos Pinos + Proteína',k:100,p:12,c:2,f:5,unit:'30 g',refQty:30,refUnit:'g'},
+{name:'Mermelada sin azúcar',k:10,p:0,c:2.5,f:0,unit:'15 g',refQty:15,refUnit:'g'},
+{name:'Tricopilia',k:65,p:0,c:16,f:0,unit:'porción',refQty:1,refUnit:'porción'},
+{name:'Café',k:2,p:0,c:.4,f:0,unit:'taza',refQty:1,refUnit:'taza'},
+{name:'Vegetales',k:30,p:2,c:6,f:.2,unit:'100 g',base:'100g',refQty:100,refUnit:'g'}
+];
+const routines={
+'Upper A':[
+ {name:'Press inclinado máquina',sets:3},{name:'Remo pecho apoyado',sets:3},{name:'Jalón al pecho',sets:2},
+ {name:'Press hombros máquina',sets:2},{name:'Elevación lateral',sets:2},{name:'Curl Scott',sets:2},{name:'Tríceps polea',sets:2}],
+'Upper B':[
+ {name:'Press plano',sets:3},{name:'Remo sentado',sets:3},{name:'Jalón unilateral',sets:2},
+ {name:'Press inclinado máquina',sets:2},{name:'Elevación lateral',sets:2},{name:'Curl inclinado mancuernas',sets:2},{name:'Tríceps sobre cabeza',sets:2}],
+'Lower A':[
+ {name:'Prensa de pierna',sets:3},{name:'Curl femoral acostado',sets:3},{name:'Extensión de pierna',sets:2},
+ {name:'Hip thrust máquina',sets:2},{name:'Gemelos',sets:3},{name:'Abdominales',sets:2}],
+'Lower B':[
+ {name:'Super squat',sets:3},{name:'Curl femoral acostado',sets:3},{name:'Prensa de pierna',sets:2},
+ {name:'Extensión de pierna',sets:2},{name:'Gemelos',sets:3},{name:'Abdominales',sets:3}]
+};
+const defaultProgress=[
+{date:'2026-08-06',weight:58.1,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-08-08',weight:57.2,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-08-09',weight:57.3,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-08-12',weight:57.7,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-02',weight:57.3,waist:0,bf:17.4,steps:0,sleep:0},
+{date:'2026-09-09',weight:57.5,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-10',weight:57.5,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-22',weight:58.0,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-23',weight:57.5,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-25',weight:57.6,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-26',weight:57.4,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-27',weight:57.3,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-28',weight:57.2,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-29',weight:57.4,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-09-30',weight:57.3,waist:77,bf:15.5,steps:0,sleep:0},
+{date:'2026-10-02',weight:57.3,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-10-03',weight:57.3,waist:0,bf:21.52,steps:0,sleep:0},
+{date:'2026-10-04',weight:57.6,waist:0,bf:20.47,steps:0,sleep:0},
+{date:'2026-10-05',weight:57.2,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-10-06',weight:57.1,waist:0,bf:21.64,steps:0,sleep:0},
+{date:'2026-10-07',weight:57.0,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-10-08',weight:56.8,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-10-09',weight:57.0,waist:0,bf:0,steps:0,sleep:0},
+{date:'2026-10-10',weight:57.1,waist:0,bf:0,steps:0,sleep:0}
+];
+function data(){let raw=localStorage.getItem(KEY);if(raw){let d=JSON.parse(raw);return {workouts:Array.isArray(d.workouts)?d.workouts:[]}}let d={workouts:[]};localStorage.setItem(KEY,JSON.stringify(d));return d}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d))}
+function tab(id,b){document.querySelectorAll('.app-section').forEach(s=>s.classList.add('hidden'));const sec=document.getElementById(id);if(!sec)return;sec.classList.remove('hidden');document.querySelectorAll('#mainNav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(id==='gym')renderGym();if(id==='share')makeSummary()}
+function today(){return new Date().toISOString().slice(0,10)}
+function init(){renderGym()}
+function lastWorkout(){let d=data();return d.workouts.slice().sort((a,b)=>b.date.localeCompare(a.date))[0]}
+function suggested(){return 'Upper A'}
+function exerciseKey(n){let k=n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\bde\s+/g,'').replace(/\s+/g,' ').trim();k=k.replace('press banca plano','press plano').replace('curl inclinado mancuerna','curl inclinado mancuernas').replace('curl banco scott','curl scott').replace('extension triceps polea cuerda','triceps polea').replace('extension pierna','extension de pierna').replace('prensa pierna','prensa de pierna');if(k.startsWith('press hombros'))return 'press hombros';if(k.startsWith('elevacion lateral'))return 'elevacion lateral';if(k.startsWith('curl inclinado'))return 'curl inclinado mancuernas';if(k.startsWith('hip thrust'))return 'hip thrust';if(k==='abdominales')return 'abdominales';return k}
+function sameExercise(a,b){return exerciseKey(a)===exerciseKey(b)}
+function unitFromLabel(label){let t=String(label||'').toLowerCase();if(/\bkg\b/.test(t))return 'kg';if(/\blb\b|\blbs\b/.test(t))return 'lb';return ''}
+function displaySet(s){let w=s.label||String(s.w??'');let u=s.unit!==undefined?s.unit:unitFromLabel(w);if(s.label&&unitFromLabel(s.label))return s.label;if(u)return `${w} ${u}`;return `${w} (sin unidad)`}
+function readExerciseSets(index){return [...document.querySelectorAll('#sets'+index+' .setrow')].map(r=>{let w=r.querySelector('.sw').value,unit=r.querySelector('.su').value;return {w:+w||0,r:+r.querySelector('.sr').value||0,unit,label:w!==''?`${w}${unit?' '+unit:''}`:''}}).filter(s=>s.w||s.r)}
+function saveExercise(name,index){let d=data(), def=routines[name][index], sets=readExerciseSets(index).filter(s=>s.w!==''&&s.r!=='');let workout=d.workouts.find(x=>x.date===today()&&x.name===name);if(!workout){workout={date:today(),name,exercises:[]};d.workouts.push(workout)}let ex=workout.exercises.find(x=>sameExercise(x.name,def.name));if(!ex){ex={name:def.name,sets:[]};workout.exercises.push(ex)}ex.sets=sets;workout.updatedAt=new Date().toISOString();save(d);startWorkout(name);let st=document.getElementById('saveStatus'+index);if(st){st.textContent='✓ Guardado';st.classList.remove('muted');setTimeout(()=>{let s=document.getElementById('saveStatus'+index);if(s)s.textContent=''},1800)}}
+function startWorkout(name){let d=data(), current=d.workouts.find(x=>x.date===today()&&x.name===name), ex=routines[name];workoutArea.innerHTML=`<div class="card"><h2>${name}</h2><div class="muted" style="margin-bottom:14px">Registra la carga y las repeticiones de cada serie. Las unidades disponibles son lb, kg y sin unidad. Los ejercicios repetidos entre rutinas comparten el último registro.</div>${ex.map((e,i)=>{let saved=current?.exercises?.find(x=>sameExercise(x.name,e.name));if(!saved){let prior=d.workouts.filter(w=>w.date!==today()).sort((a,b)=>b.date.localeCompare(a.date));for(const w of prior){const match=w.exercises?.find(x=>sameExercise(x.name,e.name));if(match){saved=match;break}}}return `<div class="exercise"><h3>${e.name} <span class="tag">${e.sets} series</span></h3><div id="sets${i}">${Array.from({length:e.sets},(_,j)=>{let v=saved?.sets?.[j];return `<div class="setrow"><b>Serie ${j+1}</b><input class="sw" type="number" step="any" placeholder="Carga" value="${v?.w||''}"><select class="su" aria-label="Unidad de carga"><option value="lb" ${(v?.unit||unitFromLabel(v?.label||''))==='lb'?'selected':''}>lb</option><option value="kg" ${(v?.unit||unitFromLabel(v?.label||''))==='kg'?'selected':''}>kg</option><option value="" ${!(v?.unit||unitFromLabel(v?.label||''))?'selected':''}>Sin unidad</option></select><input class="sr" type="number" placeholder="Reps" value="${v?.r||''}"></div>`}).join('')}</div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="secondary" onclick="saveExercise('${name}',${i})">Guardar ejercicio</button><span id="saveStatus${i}" class="small"></span></div></div>`}).join('')}<br><button class="primary" onclick="finishWorkout('${name}')">Finalizar entrenamiento</button></div>`}
+
+function finishWorkout(name){let d=data(), ex=routines[name].map((e,i)=>{let sets=readExerciseSets(i);return{name:e.name,sets}}).filter(e=>e.sets.length);d.workouts=d.workouts.filter(x=>!(x.date===today()&&x.name===name));d.workouts.push({date:today(),name,exercises:ex});save(d);renderGym();alert('Entrenamiento guardado. El rendimiento de cada ejercicio se comparte entre rutinas, sin gráficos.')}
+function renderGym(){let s=suggested();suggestion.innerHTML=`<b>Rutina sugerida: ${s}</b><br><span class="muted">Selecciona la rutina que vas a realizar.</span>`;}
+function makeSummary(){const d=data();const a=document.getElementById('fromDate').value||'0000-00-00';const b=document.getElementById('toDate').value||'9999-99-99';let lines=['# Mi Progreso — Entrenamiento',`**Período:** ${a} al ${b}`,''];const ws=d.workouts.filter(w=>w.date>=a&&w.date<=b).sort((x,y)=>x.date.localeCompare(y.date)||x.name.localeCompare(y.name));if(ws.length){ws.forEach(w=>{lines.push(`## ${w.date} — ${w.name}`);(w.exercises||[]).forEach(e=>{if(e.sets?.length)lines.push(`- **${e.name}:** ${e.sets.map(s=>`${displaySet(s)} × ${s.r} reps`).join(' · ')}`)});lines.push('')})}else lines.push('No hay entrenamientos registrados en el período.');document.getElementById('summary').value=lines.join('\n')}
+async function copySummary(){const el=document.getElementById('summary');if(!el.value.trim())makeSummary();try{await navigator.clipboard.writeText(el.value);document.getElementById('copyStatus').textContent='✓ Copiado; pégalo en ChatGPT.'}catch(e){el.focus();el.select();const ok=document.execCommand('copy');document.getElementById('copyStatus').textContent=ok?'✓ Copiado; pégalo en ChatGPT.':'Selecciona el texto y cópialo manualmente.'}}
+
+init();
+</script>
+</body></html>
